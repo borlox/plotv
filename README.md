@@ -31,13 +31,17 @@ If your version is special, you can tag it with a message
 
 At the end, close the root file using
 
-```pv.close()```
+```
+pv.close()
+```
 
 Tool
 ====
 You can use plotv as a tool to list plots in a versioned file and to get plots
 of a specific version.
 
-Use 
+Use
+
 ```$ plotv.py --help```
+
 to display the help message.
