@@ -5,12 +5,14 @@ Module
 ======
 Use the `plot_version` class from this module to save versioned plots.
 
-```from plotv import plot_version```
-```pv = plot_version()```
+```
+from plotv import plot_version
+pv = plot_version()
+```
 
 to use the default file name or use
 
-```pv2 = plot_version("filename.root")```
+```pv = plot_version("filename.root")```
 
 to specify a file name.
 
