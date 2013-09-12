@@ -16,8 +16,10 @@ to specify a file name.
 
 Then you create your ROOT plots and save them using
 
-```pv.save(canvas)```
-```pv.save(canv2, "NewName")```
+```
+pv.save(canvas)
+pv.save(canv2, "NewName")
+```
 
 You should add an comment using
 
