@@ -61,11 +61,7 @@ class plot_version:
 
 		self.root_file = TFile(file_name, "update")
 
-		now = datetime.now().replace(
-				minute = 0,
-				second = 0,
-				microsecond = 0,
-			)
+		now = datetime.now().replace(microsecond = 0)
 		self.datestr = now.isoformat("_").replace(":","-")
 
 		self.directory = self.root_file.Get(self.datestr)
@@ -75,19 +71,10 @@ class plot_version:
 		self.tagged = False
 		self.commented = False
 
-	def close():
+	def close(self):
 		"""
 		Close the internal root file
 		"""
-		if not self.commented:
-			cmt = "MISSING COMMENT"
-			if self.tagged:
-				cmt = "Tagging"
-			self.comment(cmt)
-
-		if not self.tagged:
-			self.tag("")
-
 		self.root_file.Close()
 
 	def comment(self, comment):
@@ -118,7 +105,7 @@ import os
 from getopt import getopt, GetoptError
 from collections import namedtuple
 
-get_cmd   = namedtuple("get_cmd", "type id rev")
+get_cmd   = namedtuple("get_cmd", "type id")
 list_cmd  = namedtuple("list_cmd", "type")
 
 def load_content(rf):
@@ -127,27 +114,29 @@ def load_content(rf):
 		content.append(key.GetName())
 	return content
 
-def list_directory(fdir):
-	lastkey = fdir.GetKey("comment")
-	cycle = lastkey.GetCycle()
-
-	for i in xrange(cycle, 0, -1):
-		comment = fdir.Get("comment;%d" % i)
-		
-		tagged = False
-		tag = fdir.Get("tag;%d" % i)
-		if tag and tag.GetTitle() != "":
-			tagged = True
-		print "\t%s %d - %s" % (tagged and "*" or " ", i, comment.GetTitle())
-		if tagged:
-			print "\t\t%s" % tag.GetTitle()
-
 def list_content(rf):
 	content = load_content(rf)
 
 	for i, key in enumerate(content):
-		print "%2d - %s" % (i+1, key)
-		list_directory(rf.Get(key))
+		fdir = rf.Get(key)
+
+		tag = fdir.Get("tag")
+
+		comment = fdir.Get("comment")
+		commentstr = ""
+		if comment:
+			commentstr = comment.GetTitle()
+
+		print "%s %2d - %s - %s" % (tag and "*" or " ", i+1, key, commentstr)
+		fdir = rf.Get(key)
+
+		if tag:
+			print "  Tag:", tag.GetTitle()
+
+def get_outdir(outdir, key):
+	if "{key}" in outdir:
+		outdir = outdir.format(key = key)
+	return outdir
 
 def save_obj(obj, opt):
 	prefix = opt['outdir'] + "/" + obj.GetName()
@@ -158,18 +147,23 @@ def save_obj(obj, opt):
 def get_content(rf, cmd, opt):
 	content = load_content(rf)
 
-	if cmd.id <= 0 or cmd.id > len(content):
-		print "Error: Invalid id %d" % cmd.id
-	key = content[cmd.id - 1]
+	if rf.Get(cmd.id):
+		key = cmd.id
+	else:
+		idx = int(cmd.id)
+		if idx <= 0 or idx > len(content):
+			print "Error: Invalid id", cmd.id
+		key = content[idx - 1]
 
 	fdir = rf.Get(key)
 
-	cmt = fdir.Get("comment;%d" % cmd.rev)
-	if not cmt:
-		print "Error: Invalid revision %d" % cmd.rev
+	comment = fdir.Get("comment")
 
-	print "Loading plots for %s - %d" % (key, cmd.rev)
-	print " -> %s" % cmt.GetTitle()
+	print "Loading plots for %s" % key
+	if comment:
+		print "Comment:", comment.GetTitle()
+
+	opt['outdir'] = get_outdir(opt['outdir'], key)
 
 	if not os.path.exists(opt['outdir']):
 		print "Creating output directory:", opt['outdir']
@@ -177,26 +171,35 @@ def get_content(rf, cmd, opt):
 
 	filter = ['comment', 'tag']
 	for subkey in fdir.GetListOfKeys():
-		if subkey.GetName() not in filter and subkey.GetCycle() == cmd.rev:
-			obj = fdir.Get("%s;%d" % (subkey.GetName(), cmd.rev))
+		if subkey.GetName() not in filter:
+			obj = fdir.Get(subkey.GetName())
 			save_obj(obj, opt)
 
 #-------------------------------------------------------------------------------
 
+def _defopts():
+	return {
+		'types': ["png"],
+		'outdir': "{key}",
+	}
+
 def _usage(msg = False):
 	if msg:
 		print msg
-	print "Usage: %s <options> <command> [file]"
+
+	d = _defopts()
+
+	print "Usage: %s <options> <command> [file]" % sys.argv[0]
 	print "  Options:"
 	print "    -h / --help        - Print this help message"
-	print "    -t / --type <type> - Add output file type (default: png)"
-	print "    -o <directory>     - Output directory (default: .)"
+	print "    -t / --type <type> - Add output file type (default: %s)" % ", ".join(d['types'])
+	print "    -o <directory>     - Output directory (default: %s)" % str(d['outdir'])
 	print ""
 	print "  Commands: "
-	print "    list           - List the contents of the file"
-	print "    get <id> <rev> - Get all plots of <id> with revision <rev>"
+	print "    list       - List the contents of the file"
+	print "    get <id>   - Get all plots of <id>"
 	print ""
-	print "  File defaults to '%s" % plot_version.get_default_file()
+	print "  File defaults to '%s'" % plot_version.get_default_file()
 
 	sys.exit()
 
@@ -204,10 +207,7 @@ def _getopts():
 	short_opts = "ht:o:"
 	long_opts = ["help", "type="]
 
-	options = {
-		'types': ["png"],
-		'outdir': ".",
-	}
+	options = _defopts()
 
 	try:
 		opts, args = getopt(sys.argv[1:], short_opts, long_opts)
@@ -230,10 +230,12 @@ def _getopts():
 	if args[0] == "list":
 		cmd = list_cmd("list")
 	elif args[0] == "get":
-		if len(args) < 3:
+		if len(args) < 2:
 			_usage("Error: Not enough arguments for 'get'")
-		cmd = get_cmd("get", int(args[1]), int(args[2]))
-		file_arg = 3
+		cmd = get_cmd("get", args[1])
+		file_arg = 2
+	elif args[0] == "help":
+		_usage()
 
 	if len(args) < (file_arg+1):
 		filename = plot_version.get_default_file()
