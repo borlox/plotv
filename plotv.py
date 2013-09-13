@@ -51,22 +51,25 @@ class plot_version:
 	def get_default_file():
 		return "_plots.root"
 
-	def __init__(self, file_name = ""):
+	def __init__(self, filename = "", testmode = False):
 		"""
 		Initialize the plot_version object
 		"""
 
-		if file_name == "":
-			file_name = plot_version.get_default_file()
+		self.testmode = testmode
 
-		self.root_file = TFile(file_name, "update")
+		if not self.testmode:
+			if filename == "":
+				filename = plot_version.get_default_file()
 
-		now = datetime.now().replace(microsecond = 0)
-		self.datestr = now.isoformat("_").replace(":","-")
+			self.root_file = TFile(filename, "update")
 
-		self.directory = self.root_file.Get(self.datestr)
-		if not self.directory:
-			self.directory = self.root_file.mkdir(self.datestr)
+			now = datetime.now().replace(microsecond = 0)
+			self.datestr = now.isoformat("_").replace(":","-")
+
+			self.directory = self.root_file.Get(self.datestr)
+			if not self.directory:
+				self.directory = self.root_file.mkdir(self.datestr)
 
 		self.tagged = False
 		self.commented = False
@@ -75,28 +78,32 @@ class plot_version:
 		"""
 		Close the internal root file
 		"""
-		self.root_file.Close()
+		if not self.testmode:
+			self.root_file.Close()
 
 	def comment(self, comment):
 		"""
 		Save the comment to the root file
 		"""
-		obj = TNamed("comment", comment)
-		self.directory.WriteTObject(obj)
-		self.commented = True
+		if not self.testmode:
+			obj = TNamed("comment", comment)
+			self.directory.WriteTObject(obj)
+			self.commented = True
 
 	def tag(self, msg):
-		obj = TNamed("tag", msg)
-		self.directory.WriteTObject(obj)
-		self.tagged = true
+		if not self.testmode:
+			obj = TNamed("tag", msg)
+			self.directory.WriteTObject(obj)
+			self.tagged = true
 
 	def save(self, plot, name = ""):
 		"""
 		Save the plot to the root file
 		"""
-		if name == "":
-			name = plot.GetName()
-		self.directory.WriteTObject(plot, name)
+		if not self.testmode:
+			if name == "":
+				name = plot.GetName()
+			self.directory.WriteTObject(plot, name)
 
 #-------------------------------------------------------------------------------
 
